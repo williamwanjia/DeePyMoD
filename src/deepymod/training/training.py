@@ -16,6 +16,7 @@ def train(
     log_dir: str = None,
     max_iterations: int = 10000,
     write_iterations: int = 25,
+    k_reg: float = 1.0,
     **convergence_kwargs
 ) -> None:
     """Trains the DeepMoD model. This function automatically splits the data set in a train and test set.
@@ -32,6 +33,7 @@ def train(
         max_iterations (int, optional): [description]. Max number of epochs , by default 10000.
         write_iterations (int, optional): [description]. Sets how often data is written to tensorboard and checks train loss , by default 25.
     """
+    pre_l1 = None
     logger = Logger(exp_ID, log_dir)
     sparsity_scheduler.path = (
         logger.log_dir
@@ -60,7 +62,7 @@ def train(
                 )
             ]
         )
-        loss = torch.sum(MSE + Reg)
+        loss = torch.sum(MSE + Reg * k_reg)
 
         # Optimizer step
         optimizer.zero_grad()
@@ -106,7 +108,17 @@ def train(
                     torch.cat(model.constraint_coeffs(sparse=True, scaled=True), dim=1)
                 )
             )
+
+            if pre_l1 is None:
+                pre_l1 = l1_norm
+                print(" dL1: NA")
+            else:
+                dl1 = torch.abs(pre_l1 - l1_norm).item()
+                print(f" dL1: {dl1:>8.2e}")
+                pre_l1 = l1_norm
+
             converged = convergence(iteration, l1_norm)
             if converged:
                 break
+
     logger.close(model)
